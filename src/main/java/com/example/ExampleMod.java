@@ -7,18 +7,12 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.minecraft.entity.effect.StatusEffectInstance;
-import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
-import net.minecraft.util.Identifier;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
 
 import java.io.File;
 import java.io.FileReader;
@@ -78,7 +72,7 @@ public class ExampleMod implements ModInitializer {
 
                         player.sendMessage(Text.literal("Ustawiono dom na: ")
                                 .formatted(Formatting.GREEN)
-                                .append(Text.literal(String.format("X: %.0f, Y: %.0f, Z: %.0f", data.x, data.y, data.z))
+                                .append(Text.literal(String.format(Locale.US, "X: %.0f, Y: %.0f, Z: %.0f", data.x, data.y, data.z))
                                 .formatted(Formatting.GRAY)), false);
                         return 1;
                     })
@@ -130,19 +124,17 @@ public class ExampleMod implements ModInitializer {
         });
     }
 
-    // --- SYSTEM UNIWERSALNYCH ERRORÓW ---
     public static void sendError(ServerPlayerEntity player, String message) {
         if (player == null || player.getServer() == null) return;
         player.sendMessage(Text.literal("⚠ " + message).formatted(Formatting.RED), false);
-        player.getServer().getCommandManager().executeWithPrefix(player.getCommandSource().withSilent(), 
-            "playsound minecraft:block.note_block.bass player " + player.getName().getString());
+        runCmd(player, "playsound minecraft:block.note_block.bass player " + player.getName().getString());
     }
 
-    // --- TELEPORTACJA I ODLICZANIE ---
     private void startTeleportSequence(ServerPlayerEntity player, String homeName, HomeData homeData) {
-        player.addStatusEffect(new StatusEffectInstance(StatusEffects.BLINDNESS, 80, 0, false, false, false));
-        player.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, 80, 9, false, false, false));
-        player.addStatusEffect(new StatusEffectInstance(StatusEffects.JUMP_BOOST, 80, 128, false, false, false));
+        String name = player.getName().getString();
+        runCmd(player, "effect give " + name + " minecraft:blindness 4 0 true");
+        runCmd(player, "effect give " + name + " minecraft:slowness 4 9 true");
+        runCmd(player, "effect give " + name + " minecraft:jump_boost 4 128 true");
 
         long endTime = System.currentTimeMillis() + 3000;
         activeTeleports.add(new TeleportTask(player, homeName, homeData, endTime));
@@ -153,38 +145,39 @@ public class ExampleMod implements ModInitializer {
         while (iterator.hasNext()) {
             TeleportTask task = iterator.next();
             long remainingMs = task.endTime - System.currentTimeMillis();
+            String name = task.player.getName().getString();
 
             if (remainingMs <= 0) {
-                ServerWorld targetWorld = server.getWorld(RegistryKey.of(RegistryKeys.WORLD, Identifier.of(task.home.dimension)));
-                if (targetWorld != null) {
-                    task.player.teleport(targetWorld, task.home.x, task.home.y, task.home.z, task.home.yaw, task.home.pitch);
-                }
+                // Bezpieczna teleportacja niezależna od wersji Javy
+                String tpCmd = String.format(Locale.US, "execute in %s run tp %s %.2f %.2f %.2f %.2f %.2f",
+                        task.home.dimension, name, task.home.x, task.home.y, task.home.z, task.home.yaw, task.home.pitch);
+                runCmd(task.player, tpCmd);
 
-                task.player.removeStatusEffect(StatusEffects.BLINDNESS);
-                task.player.removeStatusEffect(StatusEffects.SLOWNESS);
-                task.player.removeStatusEffect(StatusEffects.JUMP_BOOST);
+                runCmd(task.player, "effect clear " + name);
 
                 task.player.sendMessage(Text.literal("Wrócono do domu " + task.homeName).formatted(Formatting.YELLOW), false);
-                sendTitleViaCommand(task.player, "WRÓCONO DO DOMU", "yellow", task.homeName, "gray", 10, 60, 20);
+                sendTitle(task.player, "WRÓCONO DO DOMU", "yellow", task.homeName, "gray", 10, 60, 20);
 
                 iterator.remove();
             } else {
                 double seconds = remainingMs / 1000.0;
                 String timeStr = String.format(Locale.US, "%.3f", seconds);
-                sendTitleViaCommand(task.player, "WRACANIE DO DOMU...", "yellow", "poczekaj " + timeStr + "s", "gray", 0, 5, 0);
+                sendTitle(task.player, "WRACANIE DO DOMU...", "yellow", "poczekaj " + timeStr + "s", "gray", 0, 5, 0);
             }
         }
     }
 
-    private void sendTitleViaCommand(ServerPlayerEntity player, String title, String titleColor, String subtitle, String subColor, int in, int stay, int out) {
-        if (player.getServer() == null) return;
-        ServerCommandSource source = player.getCommandSource().withSilent();
-        CommandManager cmd = player.getServer().getCommandManager();
+    private static void runCmd(ServerPlayerEntity player, String command) {
+        if (player == null || player.getServer() == null) return;
+        ServerCommandSource source = player.getServer().getCommandSource().withSilent();
+        player.getServer().getCommandManager().executeWithPrefix(source, command);
+    }
+
+    private void sendTitle(ServerPlayerEntity player, String title, String titleColor, String subtitle, String subColor, int in, int stay, int out) {
         String name = player.getName().getString();
-        
-        cmd.executeWithPrefix(source, "title " + name + " times " + in + " " + stay + " " + out);
-        cmd.executeWithPrefix(source, "title " + name + " subtitle {\"text\":\"" + subtitle + "\",\"color\":\"" + subColor + "\"}");
-        cmd.executeWithPrefix(source, "title " + name + " title {\"text\":\"" + title + "\",\"color\":\"" + titleColor + "\"}");
+        runCmd(player, "title " + name + " times " + in + " " + stay + " " + out);
+        runCmd(player, "title " + name + " subtitle {\"text\":\"" + subtitle + "\",\"color\":\"" + subColor + "\"}");
+        runCmd(player, "title " + name + " title {\"text\":\"" + title + "\",\"color\":\"" + titleColor + "\"}");
     }
 
     private static class TeleportTask {
