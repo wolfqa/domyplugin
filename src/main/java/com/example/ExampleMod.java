@@ -53,7 +53,7 @@ public class ExampleMod implements ModInitializer {
                         if (player == null) return 1;
                         
                         String homeName = StringArgumentType.getString(context, "name").toLowerCase();
-                        String uuid = player.getUuidAsString();
+                        String uuid = player.getUuid().toString();
 
                         Map<String, HomeData> playerHomes = homesDatabase.computeIfAbsent(uuid, k -> new HashMap<>());
 
@@ -91,7 +91,7 @@ public class ExampleMod implements ModInitializer {
                     ServerPlayerEntity player = context.getSource().getPlayer();
                     if (player == null) return 1;
 
-                    String uuid = player.getUuidAsString();
+                    String uuid = player.getUuid().toString();
                     Map<String, HomeData> playerHomes = homesDatabase.getOrDefault(uuid, new HashMap<>());
 
                     if (playerHomes.isEmpty()) {
@@ -114,7 +114,7 @@ public class ExampleMod implements ModInitializer {
                         if (player == null) return 1;
 
                         String homeName = StringArgumentType.getString(context, "name").toLowerCase();
-                        String uuid = player.getUuidAsString();
+                        String uuid = player.getUuid().toString();
                         Map<String, HomeData> playerHomes = homesDatabase.getOrDefault(uuid, new HashMap<>());
 
                         if (!playerHomes.containsKey(homeName)) {
@@ -132,10 +132,10 @@ public class ExampleMod implements ModInitializer {
 
     // --- SYSTEM UNIWERSALNYCH ERRORÓW ---
     public static void sendError(ServerPlayerEntity player, String message) {
-        if (player == null) return;
+        if (player == null || player.getServer() == null) return;
         player.sendMessage(Text.literal("⚠ " + message).formatted(Formatting.RED), false);
-        player.getServer().getCommandManager().executeWithPrefix(player.getServer().getCommandSource().withSilent(), 
-            "playsound minecraft:block.note_block.bass player " + player.getEntityName());
+        player.getServer().getCommandManager().executeWithPrefix(player.getCommandSource().withSilent(), 
+            "playsound minecraft:block.note_block.bass player " + player.getName().getString());
     }
 
     // --- TELEPORTACJA I ODLICZANIE ---
@@ -177,9 +177,10 @@ public class ExampleMod implements ModInitializer {
     }
 
     private void sendTitleViaCommand(ServerPlayerEntity player, String title, String titleColor, String subtitle, String subColor, int in, int stay, int out) {
-        ServerCommandSource source = player.getServer().getCommandSource().withSilent();
+        if (player.getServer() == null) return;
+        ServerCommandSource source = player.getCommandSource().withSilent();
         CommandManager cmd = player.getServer().getCommandManager();
-        String name = player.getEntityName();
+        String name = player.getName().getString();
         
         cmd.executeWithPrefix(source, "title " + name + " times " + in + " " + stay + " " + out);
         cmd.executeWithPrefix(source, "title " + name + " subtitle {\"text\":\"" + subtitle + "\",\"color\":\"" + subColor + "\"}");
